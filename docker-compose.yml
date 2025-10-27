@@ -1,0 +1,148 @@
+version: '3.8'
+services:
+  pgsql:
+    image: postgres
+    container_name: pg_server
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: xxxxxx
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks:
+      - working_environment
+
+  pgadmin:
+      image: dpage/pgadmin4
+      environment:
+        PGADMIN_DEFAULT_EMAIL: andreev@mywork.ru
+        PGADMIN_DEFAULT_PASSWORD: xxxxxx
+        PGADMIN_CONFIG_SERVER_MODE: 'False'
+      volumes:
+        - pgadmin:/var/lib/pgadmin
+      ports:
+        - 5229:80
+      restart: unless-stopped
+      networks:
+      - working_environment
+
+  back:
+    image: golang:alpine
+    restart: on-failure
+    depends_on:
+      - pgsql
+    networks:
+      - working_environment
+    command: >
+        sh -c "
+        echo 'package main
+          import (
+            \"context\"
+            \"fmt\"
+            \"log\"
+            \"os\"
+
+            \"github.com/jackc/pgx/v5\"
+          )
+
+          func main() {
+            connStr := \"postgres://postgres:xxxxxx@pg_server:5432/postgres?sslmode=disable\"
+            if os.Getenv(\"DATABASE_URL\") != \"\" {
+              connStr = os.Getenv(\"DATABASE_URL\")
+            }
+
+            ctx := context.Background()
+
+            // Подключаемся к базе
+            conn, err := pgx.Connect(ctx, connStr)
+            if err != nil {
+              log.Fatalf(\"Ошибка подключения: %v\n\", err)
+            }
+            defer conn.Close(ctx)
+
+            // Проверяем подключение
+            err = conn.Ping(ctx)
+            if err != nil {
+              log.Fatalf(\"Не удалось подключиться к БД: %v\n\", err)
+            }
+            fmt.Println(\"✅ Успешное подключение к PostgreSQL!\")
+
+            var db_ex int
+            err = conn.QueryRow(ctx, `select case when 1 in (SELECT 1 FROM pg_database WHERE datname=$1) then 1 else 0 end`, \"works\").Scan(&db_ex)
+
+            if err != nil {
+              log.Fatalf(\"Ошибка : %v\", err)
+            }
+            fmt.Println(\"✅ Проверили бд\")
+            if db_ex == 0 {
+              _, err = conn.Exec(ctx, `
+              CREATE DATABASE works
+                  WITH
+                  OWNER = postgres
+                  ENCODING = 'UTF8'
+                  LOCALE_PROVIDER = 'libc'
+                  CONNECTION LIMIT = -1
+                  IS_TEMPLATE = False;
+              `)
+              if err != nil {
+                log.Fatalf(\"Ошибка создания бд: %v\", err)
+              }
+              fmt.Println(\"✅ бд создана\")
+            }
+
+            connStr = \"postgres://postgres:xxxxxx@pg_server:5432/works?sslmode=disable\"
+            conn, err = pgx.Connect(ctx, connStr)
+            if err != nil {
+              log.Fatalf(\"Ошибка подключения: %v\n\", err)
+            }
+            defer conn.Close(ctx)
+
+            _, err = conn.Exec(ctx, `
+              CREATE TABLE IF NOT EXISTS staff (
+                id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 ),
+                name VARCHAR(500) NOT NULL,
+                salary double precision,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT staff_name_unique UNIQUE (name)
+              );
+              `)
+            if err != nil {
+              log.Fatalf(\"Ошибка создания бд: %v\", err)
+            }
+
+            // Вставляем данные
+            addIds, err := conn.Query(ctx,
+              `INSERT INTO staff (name, salary) VALUES ($1, $2) 
+              ON CONFLICT (name) DO NOTHING
+              RETURNING id`,
+              \"Андреев Кирилл Андреевич\", \"400000\",
+            )
+            if err != nil {
+              log.Fatalf(\"Ошибка вставки: %v\", err)
+            }
+            var id int
+            for addIds.Next() {
+              err := addIds.Scan(&id)
+              if err != nil {
+                log.Fatal(err)
+              }
+              fmt.Printf(\"✅ Данные добавлены! ID: %d\n\", id)
+            }
+          }' > script.go &&
+          rm go.mod || true &&
+          rm go.sum || true &&
+          go mod init vac &&
+          go get github.com/jackc/pgx/v5 &&
+          go run script.go"
+
+volumes:
+  pgadmin:
+  pg_data:
+    
+
+
+networks:
+  working_environment:
+    driver: bridge
