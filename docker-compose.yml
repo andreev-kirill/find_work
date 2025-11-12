@@ -117,7 +117,7 @@ services:
               `INSERT INTO staff (name, salary) VALUES ($1, $2) 
               ON CONFLICT (name) DO NOTHING
               RETURNING id`,
-              \"Андреев Кирилл Андреевич\", \"400000\",
+              \"Андреев Кирилл Андреевич\", \"380000\",
             )
             if err != nil {
               log.Fatalf(\"Ошибка вставки: %v\", err)
