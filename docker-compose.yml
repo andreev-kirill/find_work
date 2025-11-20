@@ -135,7 +135,7 @@ services:
           rm go.sum || true &&
           go mod init vac &&
           go get github.com/jackc/pgx/v5 &&
-          go run script.go"
+          exec go run script.go"
 
 volumes:
   pgadmin:
