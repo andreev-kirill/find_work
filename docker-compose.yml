@@ -43,7 +43,7 @@ services:
             \"fmt\"
             \"log\"
             \"os\"
-
+            \"math\"
             \"github.com/jackc/pgx/v5\"
           )
 
@@ -117,7 +117,7 @@ services:
               `INSERT INTO staff (name, salary) VALUES ($1, $2) 
               ON CONFLICT (name) DO NOTHING
               RETURNING id`,
-              \"Андреев Кирилл Андреевич\", \"380000\",
+              \"Андреев Кирилл Андреевич\", math.MaxFloat64,
             )
             if err != nil {
               log.Fatalf(\"Ошибка вставки: %v\", err)
